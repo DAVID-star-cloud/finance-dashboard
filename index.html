@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finance District VINA - Tableau de bord complet</title>
+    <!-- Chart.js pour les graphiques -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* ===== STYLES GÉNÉRAUX ===== */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f2f5; padding: 20px; }
+        .container { max-width: 1400px; margin: auto; }
+        .hidden { display: none !important; }
+
+        /* Login */
+        .login-box { background: white; padding: 30px; border-radius: 8px; max-width: 400px; margin: 80px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .login-box h2 { margin-bottom: 10px; }
+        .login-box input { display: block; width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; }
+        .login-box button { width: 100%; padding: 10px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .login-box button:hover { background: #1d4ed8; }
+        .error { color: red; margin-top: 10px; }
+
+        /* En-tête */
+        header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px 25px; border-radius: 8px; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+        header h1 { font-size: 22px; }
+        .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .controls select, .controls button { padding: 6px 12px; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer; }
+        .controls button { background: #2563eb; color: white; border: none; }
+        .controls button:hover { background: #1d4ed8; }
+        .controls .export-btn { background: #16a34a; }
+        .controls .export-btn:hover { background: #15803d; }
+        #logoutBtn { background: #ef4444; }
+        #logoutBtn:hover { background: #dc2626; }
+
+        /* Cartes */
+        .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 20px; margin-bottom: 20px; }
+        .card { background: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .card .value { font-size: 26px; font-weight: bold; }
+        .positive { color: #16a34a; }
+        .negative { color: #dc2626; }
+
+        /* Graphique */
+        .chart-container { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; height: 300px; }
+
+        /* Tableaux */
+        .table-container { background: white; border-radius: 8px; overflow-x: auto; padding: 10px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { background: #f1f5f9; text-align: left; padding: 8px; position: sticky; top: 0; z-index: 2; }
+        td { padding: 8px; border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
+        .section-title { font-size: 18px; font-weight: bold; margin: 25px 0 10px; }
+        .edit-btn { background: #f59e0b; border: none; color: white; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .edit-btn:hover { background: #d97706; }
+
+        /* Modal d'édition */
+        .modal-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 999; }
+        .modal { background: white; padding: 25px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; }
+        .modal h3 { margin-bottom: 15px; }
+        .modal .field-group { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+        .modal .field-group label { flex: 0 0 120px; font-weight: 500; }
+        .modal .field-group input { flex: 1; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
+        .modal .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        .modal .actions button { padding: 8px 16px; border-radius: 4px; border: none; cursor: pointer; }
+        .modal .actions .save-btn { background: #2563eb; color: white; }
+        .modal .actions .cancel-btn { background: #e5e7eb; }
+        .modal .actions .save-btn:hover { background: #1d4ed8; }
+        .modal .actions .cancel-btn:hover { background: #d1d5db; }
+
+        /* Chargement */
+        #loading { text-align: center; padding: 50px; font-size: 18px; color: #6b7280; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            header { flex-direction: column; align-items: stretch; }
+            .controls { justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">⏳ Chargement...</div>
+
+    <div id="app" class="container" style="display:none;">
+        <!-- Login -->
+        <div id="loginSection">
+            <div class="login-box">
+                <h2>🔐 Connexion</h2>
+                <p>Accès réservé aux trésoriers du district</p>
+                <input type="email" id="email" placeholder="Email" autocomplete="email">
+                <input type="password" id="password" placeholder="Mot de passe" autocomplete="current-password">
+                <button id="loginBtn">Se connecter</button>
+                <div id="loginError" class="error"></div>
+            </div>
+        </div>
+
+        <!-- Dashboard -->
+        <div id="dashboardSection" class="hidden">
+            <header>
+                <h1>📊 Finance District VINA 2026</h1>
+                <div class="controls">
+                    <label for="monthSelect">Mois :</label>
+                    <select id="monthSelect">
+                        <option value="all">Année entière</option>
+                        <option value="FEVRIER">Février</option>
+                        <option value="MARS">Mars</option>
+                        <option value="AVRIL">Avril</option>
+                        <option value="MAI">Mai</option>
+                        <option value="JUIN">Juin</option>
+                        <option value="JUILLET">Juillet</option>
+                        <option value="AOUT">Août</option>
+                        <option value="SEPT">Septembre</option>
+                        <option value="OCT">Octobre</option>
+                        <option value="NOVEM">Novembre</option>
+                        <option value="DECEM">Décembre</option>
+                    </select>
+                    <button id="refreshBtn">🔄 Actualiser</button>
+                    <button class="export-btn" id="exportExcelBtn">📥 Excel</button>
+                    <button class="export-btn" id="exportPdfBtn">📄 PDF</button>
+                    <button id="logoutBtn">Déconnexion</button>
+                </div>
+            </header>
+
+            <!-- Cartes -->
+            <div class="summary-cards" id="summaryCards">
+                <div class="card"><div>Total Entrées</div><div class="value" id="totalEntrees">-</div></div>
+                <div class="card"><div>Dépenses (assemblées)</div><div class="value" id="totalDepenses">-</div></div>
+                <div class="card"><div>Suppléments pasteurs</div><div class="value" id="totalSupplements">-</div></div>
+                <div class="card"><div>Reste en caisse</div><div class="value" id="resteCaisse">-</div></div>
+            </div>
+
+            <!-- Graphique -->
+            <div class="chart-container"><canvas id="evolutionChart"></canvas></div>
+
+            <!-- Assemblées -->
+            <div class="section-title">🏛️ Détail par assemblée</div>
+            <div class="table-container" style="max-height:400px; overflow-y:auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Assemblée</th>
+                            <th>Entrées</th><th>Comm.</th><th>École</th><th>Missions</th>
+                            <th>Fonds BN</th><th>Fonds rég.</th><th>Fonds dist.</th>
+                            <th>Total à dép.</th><th>Loyers</th><th>Enveloppes</th>
+                            <th>Autres</th><th>Nutrition</th><th>Total dép.</th><th>Diff.</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="assemblyBody"><tr><td colspan="16">Chargement...</td></tr></tbody>
+                </table>
+            </div>
+
+            <!-- Pasteurs -->
+            <div class="section-title">👤 Détail par pasteur</div>
+            <div class="table-container" style="max-height:400px; overflow-y:auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Pasteur</th>
+                            <th>Dîmes</th><th>Retraite</th><th>CNPS</th>
+                            <th>Suppléments</th><th>Transports</th><th>Total</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pastorBody"><tr><td colspan="8">Chargement...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal d'édition (caché) -->
+    <div id="editModal" class="modal-overlay hidden">
+        <div class="modal">
+            <h3 id="modalTitle">Modifier les données</h3>
+            <div id="modalFields"></div>
+            <div class="actions">
+                <button class="cancel-btn" id="modalCancel">Annuler</button>
+                <button class="save-btn" id="modalSave">💾 Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==============================================================
+        // 1. CONFIGURATION
+        // ==============================================================
+        const SUPABASE_URL = "https://oazngnhgxdbozubwdjay.supabase.co";   
+        const SUPABASE_ANON_KEY ="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9hem5nbmhneGRib3p1YndkamF5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMzNzQzNzUsImV4cCI6MjA5ODk1MDM3NX0.hs5jBIuxU7t7KxJblMWLEopfun8Ln1dUxaVw9g_Aqu0"; 
+
+        // ==============================================================
+        // 2. ÉTAT GLOBAL
+        // ==============================================================
+        let accessToken = localStorage.getItem('sb_token') || null;
+        let currentUser = null;
+        let currentData = { assemblyData: [], pastorData: [] };
+        let chartInstance = null;
+
+        // Éléments DOM
+        const $ = id => document.getElementById(id);
+        const loginSection = $('loginSection');
+        const dashboardSection = $('dashboardSection');
+        const loading = $('loading');
+        const app = $('app');
+        const emailInput = $('email');
+        const passwordInput = $('password');
+        const loginBtn = $('loginBtn');
+        const loginError = $('loginError');
+        const logoutBtn = $('logoutBtn');
+        const monthSelect = $('monthSelect');
+        const refreshBtn = $('refreshBtn');
+        const totalEntrees = $('totalEntrees');
+        const totalDepenses = $('totalDepenses');
+        const totalSupplements = $('totalSupplements');
+        const resteCaisse = $('resteCaisse');
+        const assemblyBody = $('assemblyBody');
+        const pastorBody = $('pastorBody');
+        const modal = $('editModal');
+        const modalTitle = $('modalTitle');
+        const modalFields = $('modalFields');
+        const modalCancel = $('modalCancel');
+        const modalSave = $('modalSave');
+
+        // ==============================================================
+        // 3. FONCTIONS D'API (REST avec token)
+        // ==============================================================
+        async function supabaseRequest(path, method = 'GET', body = null) {
+            const url = SUPABASE_URL + path;
+            const headers = {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': accessToken ? `Bearer ${accessToken}` : SUPABASE_ANON_KEY,
+                'Content-Type': 'application/json'
+            };
+            const options = { method, headers };
+            if (body) options.body = JSON.stringify(body);
+            const response = await fetch(url, options);
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(`Erreur ${response.status}: ${text}`);
+            }
+            return response.json();
+        }
+
+        async function login(email, password) {
+            const url = SUPABASE_URL + '/auth/v1/token?grant_type=password';
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error_description || 'Échec de connexion');
+            }
+            const data = await response.json();
+            accessToken = data.access_token;
+            localStorage.setItem('sb_token', accessToken);
+            currentUser = data.user;
+            return data;
+        }
+
+        async function logout() {
+            accessToken = null;
+            localStorage.removeItem('sb_token');
+            currentUser = null;
+        }
+
+        // ==============================================================
+        // 4. CHARGEMENT DES DONNÉES
+        // ==============================================================
+        async function fetchData(month = 'all') {
+            let reportFilter = '';
+            if (month !== 'all') {
+                const reports = await supabaseRequest(`/rest/v1/monthly_reports?month=eq.${month}&select=id`);
+                if (reports.length === 0) {
+                    return { assemblyData: [], pastorData: [] };
+                }
+                const ids = reports.map(r => r.id).join(',');
+                reportFilter = `&report_id=in.(${ids})`;
+            }
+
+            const assemblyQuery = `/rest/v1/assembly_monthly_data?select=*,assemblies!inner(name),monthly_reports!inner(month,year)` + reportFilter;
+            const pastorQuery = `/rest/v1/pastor_monthly_data?select=*,pastors!inner(name),monthly_reports!inner(month,year)` + reportFilter;
+
+            const [assemblyData, pastorData] = await Promise.all([
+                supabaseRequest(assemblyQuery),
+                supabaseRequest(pastorQuery)
+            ]);
+            return { assemblyData, pastorData };
+        }
+
+        // ==============================================================
+        // 5. AFFICHAGE DU TABLEAU DE BORD (avec calculs dynamiques)
+        // ==============================================================
+        function formatNumber(n) {
+            if (n === undefined || n === null) return '0';
+            return Number(n).toLocaleString('fr-FR', { maximumFractionDigits: 0 });
+        }
+
+        function renderDashboard(data) {
+            currentData = data;
+            const { assemblyData, pastorData } = data;
+
+            // --- Cartes : calcul direct depuis les données brutes ---
+            let totalEntreesSum = 0;
+            let totalDepensesSum = 0;
+            assemblyData.forEach(row => {
+                totalEntreesSum += Number(row.entrees_total) || 0;
+                totalDepensesSum += Number(row.total_depense1) || 0;
+            });
+
+            let totalSupplementsSum = 0;
+            pastorData.forEach(row => {
+                totalSupplementsSum += Number(row.supplements_soutiens) || 0;
+            });
+
+            // Reste en caisse = Entrées - Dépenses (assemblées) - Suppléments (pasteurs)
+            const resteCaisseSum = totalEntreesSum - totalDepensesSum - totalSupplementsSum;
+
+            totalEntrees.textContent = formatNumber(totalEntreesSum);
+            totalDepenses.textContent = formatNumber(totalDepensesSum);
+            totalSupplements.textContent = formatNumber(totalSupplementsSum);
+            resteCaisse.textContent = formatNumber(resteCaisseSum);
+            resteCaisse.className = 'value ' + (resteCaisseSum >= 0 ? 'positive' : 'negative');
+
+            // --- Tableau assemblées ---
+            if (assemblyData.length === 0) {
+                assemblyBody.innerHTML = '<tr><td colspan="16">Aucune donnée pour cette période</td></tr>';
+            } else {
+                let rows = '';
+                assemblyData.forEach(row => {
+                    const id = row.id;
+                    rows += `<tr>
+                        <td><strong>${row.assemblies.name}</strong></td>
+                        <td>${formatNumber(row.entrees_total)}</td>
+                        <td>${formatNumber(row.communication)}</td>
+                        <td>${formatNumber(row.ecole_biblique)}</td>
+                        <td>${formatNumber(row.les_missions)}</td>
+                        <td>${formatNumber(row.fonds_bureau_national)}</td>
+                        <td>${formatNumber(row.fonds_regional)}</td>
+                        <td>${formatNumber(row.fonds_de_district)}</td>
+                        <td>${formatNumber(row.total_fonds_a_depenser)}</td>
+                        <td>${formatNumber(row.loyers)}</td>
+                        <td>${formatNumber(row.enveloppes)}</td>
+                        <td>${formatNumber(row.autres_depenses)}</td>
+                        <td>${formatNumber(row.nutrition)}</td>
+                        <td>${formatNumber(row.total_depense1)}</td>
+                        <td>${formatNumber(row.difference1)}</td>
+                        <td><button class="edit-btn" data-type="assembly" data-id="${id}">✏️</button></td>
+                    </tr>`;
+                });
+                assemblyBody.innerHTML = rows;
+            }
+
+            // --- Tableau pasteurs ---
+            if (pastorData.length === 0) {
+                pastorBody.innerHTML = '<tr><td colspan="8">Aucune donnée pour cette période</td></tr>';
+            } else {
+                let rows = '';
+                pastorData.forEach(row => {
+                    const id = row.id;
+                    rows += `<tr>
+                        <td><strong>${row.pastors.name}</strong></td>
+                        <td>${formatNumber(row.dimes)}</td>
+                        <td>${formatNumber(row.fonds_retraite)}</td>
+                        <td>${formatNumber(row.cnpscnps)}</td>
+                        <td>${formatNumber(row.supplements_soutiens)}</td>
+                        <td>${formatNumber(row.transports)}</td>
+                        <td>${formatNumber(row.total_pasteur)}</td>
+                        <td><button class="edit-btn" data-type="pastor" data-id="${id}">✏️</button></td>
+                    </tr>`;
+                });
+                pastorBody.innerHTML = rows;
+            }
+
+            // --- Graphique (calculé à partir des données brutes) ---
+            updateChartFromData(assemblyData, pastorData, monthSelect.value);
+
+            // --- Attacher les événements d'édition ---
+            document.querySelectorAll('.edit-btn').forEach(btn => {
+                btn.addEventListener('click', openEditModal);
+            });
+        }
+
+        // ==============================================================
+        // 6. GRAPHIQUE DYNAMIQUE
+        // ==============================================================
+        function updateChartFromData(assemblyData, pastorData, month) {
+            const ctx = document.getElementById('evolutionChart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+
+            if (month !== 'all') {
+                document.querySelector('.chart-container').style.display = 'none';
+                return;
+            }
+            document.querySelector('.chart-container').style.display = 'block';
+
+            const moisOrdre = ['FEVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','AOUT','SEPT','OCT','NOVEM','DECEM'];
+            const map = {};
+
+            // Agréger les entrées et dépenses par mois
+            assemblyData.forEach(row => {
+                const m = row.monthly_reports.month;
+                if (!map[m]) map[m] = { entree: 0, depense: 0 };
+                map[m].entree += Number(row.entrees_total) || 0;
+                map[m].depense += Number(row.total_depense1) || 0;
+            });
+
+            // Ajouter les suppléments pasteurs par mois
+            pastorData.forEach(row => {
+                const m = row.monthly_reports.month;
+                if (!map[m]) map[m] = { entree: 0, depense: 0, supplement: 0 };
+                map[m].supplement = (map[m].supplement || 0) + (Number(row.supplements_soutiens) || 0);
+            });
+
+            // Calculer le reste en caisse pour chaque mois
+            const labels = moisOrdre.filter(m => map[m]);
+            const entreeData = labels.map(m => map[m].entree);
+            const depenseData = labels.map(m => map[m].depense);
+            const resteData = labels.map(m => map[m].entree - map[m].depense - (map[m].supplement || 0));
+
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Entrées', data: entreeData, backgroundColor: 'rgba(37,99,235,0.6)' },
+                        { label: 'Dépenses (assemblées)', data: depenseData, backgroundColor: 'rgba(220,38,38,0.6)' },
+                        { label: 'Reste en caisse', data: resteData, backgroundColor: 'rgba(22,163,74,0.6)' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { title: { display: true, text: 'Évolution mensuelle' } },
+                    scales: { y: { beginAtZero: true, ticks: { callback: v => v.toLocaleString() } } }
+                }
+            });
+        }
+
+        // ==============================================================
+        // 7. ÉDITION (MODAL)
+        // ==============================================================
+        let editingType = null;
+        let editingId = null;
+
+        function openEditModal(e) {
+            const btn = e.currentTarget;
+            const type = btn.dataset.type;
+            const id = parseInt(btn.dataset.id);
+            editingType = type;
+            editingId = id;
+
+            let rowData = null;
+            if (type === 'assembly') {
+                rowData = currentData.assemblyData.find(d => d.id === id);
+            } else if (type === 'pastor') {
+                rowData = currentData.pastorData.find(d => d.id === id);
+            }
+            if (!rowData) {
+                alert('Donnée introuvable.');
+                return;
+            }
+
+            let fieldsHtml = '';
+            if (type === 'assembly') {
+                const cols = [
+                    { key: 'entrees_total', label: 'Entrées totales' },
+                    { key: 'communication', label: 'Communication' },
+                    { key: 'ecole_biblique', label: 'École biblique' },
+                    { key: 'les_missions', label: 'Missions' },
+                    { key: 'fonds_bureau_national', label: 'Fonds BN' },
+                    { key: 'fonds_regional', label: 'Fonds régional' },
+                    { key: 'fonds_de_district', label: 'Fonds district' },
+                    { key: 'fonds_a_depenser', label: 'Fonds à dépenser (15%)' },
+                    { key: 'fonds_a_depenser2', label: 'Fonds à dépenser 2 (5%)' },
+                    { key: 'loyers', label: 'Loyers' },
+                    { key: 'enveloppes', label: 'Enveloppes' },
+                    { key: 'autres_depenses', label: 'Autres dépenses' },
+                    { key: 'nutrition', label: 'Nutrition' }
+                ];
+                fieldsHtml = cols.map(c => `
+                    <div class="field-group">
+                        <label>${c.label}</label>
+                        <input type="number" step="0.01" id="field_${c.key}" value="${rowData[c.key] || 0}">
+                    </div>
+                `).join('');
+                modalTitle.textContent = `✏️ Modifier les données de ${rowData.assemblies.name}`;
+            } else if (type === 'pastor') {
+                const cols = [
+                    { key: 'dimes', label: 'Dîmes' },
+                    { key: 'fonds_retraite', label: 'Fonds retraite' },
+                    { key: 'cnpscnps', label: 'CNPS/CNPS' },
+                    { key: 'supplements_soutiens', label: 'Suppléments' },
+                    { key: 'transports', label: 'Transports' }
+                ];
+                fieldsHtml = cols.map(c => `
+                    <div class="field-group">
+                        <label>${c.label}</label>
+                        <input type="number" step="0.01" id="field_${c.key}" value="${rowData[c.key] || 0}">
+                    </div>
+                `).join('');
+                modalTitle.textContent = `✏️ Modifier les données de ${rowData.pastors.name}`;
+            }
+
+            modalFields.innerHTML = fieldsHtml;
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+            editingType = null;
+            editingId = null;
+        }
+
+        modalCancel.addEventListener('click', closeModal);
+        modal.addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+
+        modalSave.addEventListener('click', async function() {
+            if (!editingType || !editingId) return;
+
+            const inputs = modalFields.querySelectorAll('input');
+            const updated = {};
+            inputs.forEach(input => {
+                const key = input.id.replace('field_', '');
+                updated[key] = parseFloat(input.value) || 0;
+            });
+
+            // Recalculs automatiques pour les assemblées
+            if (editingType === 'assembly') {
+                updated.total_fonds_a_depenser = (updated.fonds_a_depenser || 0) + (updated.fonds_a_depenser2 || 0);
+                updated.total_depense1 = (updated.loyers || 0) + (updated.enveloppes || 0) + (updated.autres_depenses || 0) + (updated.nutrition || 0);
+                updated.difference1 = (updated.total_fonds_a_depenser || 0) - (updated.total_depense1 || 0);
+            } else if (editingType === 'pastor') {
+                updated.total_pasteur = (updated.dimes || 0) + (updated.fonds_retraite || 0) + (updated.cnpscnps || 0) + (updated.supplements_soutiens || 0) + (updated.transports || 0);
+            }
+
+            try {
+                const table = editingType === 'assembly' ? 'assembly_monthly_data' : 'pastor_monthly_data';
+                await supabaseRequest(`/rest/v1/${table}?id=eq.${editingId}`, 'PATCH', updated);
+                await loadData();
+                closeModal();
+                alert('✅ Données mises à jour avec succès !');
+            } catch (error) {
+                alert('❌ Erreur : ' + error.message);
+            }
+        });
+
+        // ==============================================================
+        // 8. EXPORT EXCEL
+        // ==============================================================
+        document.getElementById('exportExcelBtn').addEventListener('click', async function() {
+            try {
+                if (typeof XLSX === 'undefined') {
+                    await loadScript('https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js');
+                }
+                const data = currentData.assemblyData.map(row => ({
+                    'Assemblée': row.assemblies.name,
+                    'Entrées totales': row.entrees_total,
+                    'Communication': row.communication,
+                    'École biblique': row.ecole_biblique,
+                    'Missions': row.les_missions,
+                    'Fonds BN': row.fonds_bureau_national,
+                    'Fonds régional': row.fonds_regional,
+                    'Fonds district': row.fonds_de_district,
+                    'Total à dépenser': row.total_fonds_a_depenser,
+                    'Loyers': row.loyers,
+                    'Enveloppes': row.enveloppes,
+                    'Autres dépenses': row.autres_depenses,
+                    'Nutrition': row.nutrition,
+                    'Total dépenses': row.total_depense1,
+                    'Différence': row.difference1
+                }));
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.json_to_sheet(data);
+                XLSX.utils.book_append_sheet(wb, ws, 'Assemblées');
+
+                const pastorData = currentData.pastorData.map(row => ({
+                    'Pasteur': row.pastors.name,
+                    'Dîmes': row.dimes,
+                    'Fonds retraite': row.fonds_retraite,
+                    'CNPS': row.cnpscnps,
+                    'Suppléments': row.supplements_soutiens,
+                    'Transports': row.transports,
+                    'Total': row.total_pasteur
+                }));
+                const ws2 = XLSX.utils.json_to_sheet(pastorData);
+                XLSX.utils.book_append_sheet(wb, ws2, 'Pasteurs');
+                XLSX.writeFile(wb, `finance_district_${monthSelect.value}_${new Date().toISOString().slice(0,10)}.xlsx`);
+            } catch (error) {
+                alert('Erreur export Excel : ' + error.message);
+            }
+        });
+
+        // ==============================================================
+        // 9. EXPORT PDF
+        // ==============================================================
+        document.getElementById('exportPdfBtn').addEventListener('click', async function() {
+            try {
+                if (typeof html2canvas === 'undefined') {
+                    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+                }
+                if (typeof jspdf === 'undefined') {
+                    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+                }
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF('landscape', 'mm', 'a4');
+                const content = document.getElementById('dashboardSection');
+                const canvas = await html2canvas(content, { scale: 2, useCORS: true });
+                const imgData = canvas.toDataURL('image/png');
+                const imgWidth = 280;
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                doc.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
+                doc.save(`finance_district_${monthSelect.value}_${new Date().toISOString().slice(0,10)}.pdf`);
+            } catch (error) {
+                alert('Erreur export PDF : ' + error.message);
+            }
+        });
+
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+
+        // ==============================================================
+        // 10. GESTION DE LA CONNEXION ET CHARGEMENT
+        // ==============================================================
+        async function loadData() {
+            const month = monthSelect.value;
+            try {
+                const data = await fetchData(month);
+                renderDashboard(data);
+            } catch (error) {
+                alert('Erreur de chargement : ' + error.message);
+                console.error(error);
+            }
+        }
+
+        loginBtn.addEventListener('click', async () => {
+            const email = emailInput.value.trim();
+            const password = passwordInput.value.trim();
+            if (!email || !password) {
+                loginError.textContent = 'Veuillez saisir email et mot de passe.';
+                return;
+            }
+            loginError.textContent = '';
+            try {
+                await login(email, password);
+                loginSection.classList.add('hidden');
+                dashboardSection.classList.remove('hidden');
+                await loadData();
+            } catch (error) {
+                loginError.textContent = error.message;
+            }
+        });
+
+        logoutBtn.addEventListener('click', async () => {
+            await logout();
+            loginSection.classList.remove('hidden');
+            dashboardSection.classList.add('hidden');
+            assemblyBody.innerHTML = '<tr><td colspan="16">Déconnecté</td></tr>';
+            pastorBody.innerHTML = '<tr><td colspan="8">Déconnecté</td></tr>';
+            totalEntrees.textContent = '-';
+            totalDepenses.textContent = '-';
+            totalSupplements.textContent = '-';
+            resteCaisse.textContent = '-';
+            if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+        });
+
+        refreshBtn.addEventListener('click', loadData);
+        monthSelect.addEventListener('change', loadData);
+
+        async function init() {
+            if (accessToken) {
+                try {
+                    await supabaseRequest('/rest/v1/monthly_reports?limit=1');
+                    loginSection.classList.add('hidden');
+                    dashboardSection.classList.remove('hidden');
+                    await loadData();
+                    loading.style.display = 'none';
+                    app.style.display = 'block';
+                    return;
+                } catch (e) {
+                    localStorage.removeItem('sb_token');
+                    accessToken = null;
+                }
+            }
+            loginSection.classList.remove('hidden');
+            dashboardSection.classList.add('hidden');
+            loading.style.display = 'none';
+            app.style.display = 'block';
+        }
+
+        init();
+
+        window.addEventListener('unhandledrejection', (e) => {
+            console.error('Erreur non gérée :', e.reason);
+        });
+    </script>
+</body>
+</html>
